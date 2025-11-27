@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
-import { supabase } from '@/lib/supabaseClient'
+import { db } from '@/lib/firebase'
+import { collection, addDoc, Timestamp } from 'firebase/firestore'
 import { countries, bikeModels, wheelTypes } from '@/lib/constants'
 import styles from './RegistrationForm.module.css'
 
@@ -71,40 +72,38 @@ export default function RegistrationForm() {
         setMessage(null)
 
         try {
-            // Insert customer
-            const { data: customerData, error: customerError } = await supabase
-                .from('customers')
-                .insert({
-                    first_name: formData.firstName,
-                    last_name: formData.lastName,
-                    email: formData.email,
-                    phone: `${formData.phonePrefix} ${formData.phone}`,
-                    country: formData.country,
-                    address: formData.address,
-                    city: formData.city,
-                    zip_code: formData.zipCode,
-                })
-                .select()
-                .single()
+            // Prepare customer data
+            const customerData = {
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.email,
+                phone: `${formData.phonePrefix} ${formData.phone}`,
+                country: formData.country,
+                address: formData.address,
+                city: formData.city,
+                zipCode: formData.zipCode,
+                createdAt: Timestamp.now(),
+            }
 
-            if (customerError) throw customerError
+            // Add customer to Firestore
+            const customerRef = await addDoc(collection(db, 'customers'), customerData)
 
-            // Insert product
+            // Prepare product data
             const finalModel = formData.model === 'other' ? formData.modelOther : formData.model
             const finalWheelType = formData.wheelType === 'other' ? formData.wheelTypeOther : formData.wheelType
 
-            const { error: productError } = await supabase
-                .from('products')
-                .insert({
-                    customer_id: customerData.id,
-                    model: finalModel,
-                    serial_number: formData.serialNumber,
-                    wheel_type: finalWheelType,
-                    purchase_date: formData.purchaseDate || null,
-                    notes: formData.notes,
-                })
+            const productData = {
+                customerId: customerRef.id,
+                model: finalModel,
+                serialNumber: formData.serialNumber,
+                wheelType: finalWheelType || null,
+                purchaseDate: formData.purchaseDate || null,
+                notes: formData.notes,
+                createdAt: Timestamp.now(),
+            }
 
-            if (productError) throw productError
+            // Add product to Firestore
+            await addDoc(collection(db, 'products'), productData)
 
             setMessage({ type: 'success', text: t('message.success') })
 
